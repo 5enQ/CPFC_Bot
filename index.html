@@ -219,7 +219,21 @@ main{padding:12px 10px 40px;gap:12px}
 /* floating capsule tab bar */
 .nav{left:14px;right:14px;bottom:calc(10px + env(safe-area-inset-bottom,0px));padding:5px;border-radius:30px;gap:4px;border-top:1px solid var(--rim-low)}
 .nav button{border-radius:24px;padding:7px 0}
-.nav button[aria-current=page]{background:color-mix(in srgb,var(--accent) 16%,var(--glass-strong));box-shadow:inset 0 1px 0 var(--rim)}
+.nav button{position:relative;z-index:1;transition:color .3s}
+.nav button[aria-current=page]{background:none}
+.nav button svg{transition:transform .45s cubic-bezier(.34,1.56,.64,1)}
+.nav button[aria-current=page] svg{transform:translateY(-1px) scale(1.12)}
+/* sliding glass pill under the active tab */
+.nav .ind{position:absolute;top:5px;bottom:5px;left:5px;width:calc((100% - 18px)/3);z-index:0;pointer-events:none;
+  transform:translateX(calc(var(--i,0) * (100% + 4px)));transition:transform .55s cubic-bezier(.34,1.32,.5,1)}
+.nav .ind i{position:absolute;inset:0;border-radius:24px;background:color-mix(in srgb,var(--accent) 16%,var(--glass-strong));
+  box-shadow:inset 0 1px 0 var(--rim),0 2px 8px -3px color-mix(in srgb,var(--accent) 40%,transparent)}
+.nav .ind.go i{animation:squish .55s cubic-bezier(.3,.9,.4,1)}
+@keyframes squish{0%{transform:scale(1,1)}30%{transform:scale(1.18,.9)}65%{transform:scale(.97,1.03)}100%{transform:scale(1,1)}}
+/* the page slides in from the side of the tab you came from */
+.view.enter{animation:viewIn .32s cubic-bezier(.2,.8,.3,1)}
+@keyframes viewIn{from{opacity:0;transform:translateX(calc(var(--dir,0) * 18px))}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.nav .ind,.nav button svg{transition:none}.nav .ind.go i,.view.enter{animation:none}}
 /* sheet floats above the content too */
 .sheetWrap{background:rgba(0,0,0,.25);padding:8px 8px calc(8px + env(safe-area-inset-bottom,0px))}
 .sheet{border-radius:30px;background:var(--glass-strong);padding:18px 16px 18px}
@@ -258,6 +272,7 @@ main{padding:12px 10px 40px;gap:12px}
 <main id="list"></main>
 </section>
 <nav class="nav" id="nav">
+  <span class="ind" aria-hidden="true"><i></i></span>
   <button type="button" data-v="vDiary" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>Дневник</button>
   <button type="button" data-v="vFood"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>Блюда</button>
   <button type="button" data-v="vMe"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg>Профиль</button>
@@ -504,7 +519,12 @@ const eK=e=>{ const m=e[3]==null?1:e[3]/100; return {k:e[4]*m,p:e[5]*m,f:e[6]*m,
 function totals(s,meal){ const t={k:0,p:0,f:0,c:0}; for(const e of day(s).e) if(meal==null||e[0]===meal){ const v=eK(e); for(const x in t) t[x]+=v[x]; } return t; }
 
 /* ---------- views ---------- */
+const TABS=['vDiary','vFood','vMe'];
 function show(v){
+  const from=TABS.indexOf(S.view), to=TABS.indexOf(v);
+  const ind=document.querySelector('#nav .ind'); ind.style.setProperty('--i',to);
+  if(from!==to){ ind.classList.remove('go'); void ind.offsetWidth; ind.classList.add('go');
+    const el=document.getElementById(v); el.style.setProperty('--dir',to>from?1:-1); el.classList.remove('enter'); void el.offsetWidth; el.classList.add('enter'); }
   S.view=v;
   for(const id of ['vDiary','vFood','vMe']) document.getElementById(id).hidden=id!==v;
   for(const b of document.querySelectorAll('#nav button')) b.setAttribute('aria-current',b.dataset.v===v?'page':'false');
