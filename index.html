@@ -234,8 +234,10 @@ main{padding:12px 10px 40px;gap:12px}
 /* espresso: small porcelain cup with a handle, on a saucer */
 .esp{width:38px;height:46px;padding:0;border:0;background:none;cursor:pointer;position:relative;display:flex;align-items:flex-end;justify-content:center}
 .esp::before{content:"";position:absolute;left:2px;right:2px;bottom:2px;height:4px;border-radius:50%;background:#f4f4f4;box-shadow:0 1px 2px rgba(0,0,0,.25)}
-.esp::after{content:"";position:absolute;right:3px;bottom:11px;width:8px;height:9px;border:2.5px solid #f4f4f4;border-left:0;border-radius:0 7px 7px 0}
-.espc{position:relative;width:24px;height:19px;margin:0 6px 5px 0;border:2.5px solid #f4f4f4;border-top-width:1.5px;border-radius:2px 2px 11px 11px;overflow:hidden;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.2);transform:translateZ(0)}
+/* the handle hangs off the cup itself, so it sits level with the cup body */
+.espw{position:relative;display:block;margin:0 6px 5px 0}
+.espw::after{content:"";position:absolute;left:calc(100% - 1px);top:4px;width:6px;height:8px;border:2.5px solid #f4f4f4;border-left:0;border-radius:0 6px 6px 0;box-shadow:1px 1px 2px -1px rgba(0,0,0,.25)}
+.espc{position:relative;display:block;width:24px;height:19px;border:2.5px solid #f4f4f4;border-top-width:1.5px;border-radius:2px 2px 11px 11px;overflow:hidden;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.2);transform:translateZ(0)}
 .espc .wat{top:18%;transition:none}
 .espc .wat::before{background:#c98d4a;height:2.5px}
 .tocup.drain .wat,.esp.drain .wat{top:115%;transition:top .55s ease-in}
@@ -605,7 +607,7 @@ function renderDiary(){
   const wg=n?n.water:8, cups=Math.max(wg,d.w), cof=coffees(d);
   h+=`<div class="card"><div class="h2">Вода <span id="waterTxt">${waterLine(d,wg)}</span></div><div class="cups">${Array.from({length:cups},(_,i)=>`<button class="cup${i<d.w?' on':''}" data-act="cup" data-i="${i}" aria-label="Стакан ${i+1}"><i class="wat"></i></button>`).join('')}<button class="icon" data-act="cupAdd" aria-label="Ещё стакан">+</button>
     ${cof.length?'<span class="cupsep"></span>'+cof.map(c=>c.kind==='espresso'
-      ?`<button class="esp" data-act="spill" data-j="${c.j}" aria-label="${esc(c.name)}"><span class="espc"><i class="wat" style="--c:${COFFEE.espresso.c}"></i></span></button>`
+      ?`<button class="esp" data-act="spill" data-j="${c.j}" aria-label="${esc(c.name)}"><span class="espw"><span class="espc"><i class="wat" style="--c:${COFFEE.espresso.c}"></i></span></span></button>`
       :`<button class="tocup" data-act="spill" data-j="${c.j}" aria-label="${esc(c.name)}"><span class="lid"></span><span class="body"><i class="wat" style="--c:${COFFEE[c.kind].c}"></i></span></button>`).join(''):''}</div></div>`;
   h+=weekHTML(n);
   h+=`<p class="foot">Норма считается по формуле Миффлина — Сан-Жеора и даёт ориентир, а не медицинскую рекомендацию.</p>`;
@@ -643,7 +645,14 @@ document.getElementById('diary').addEventListener('click',async e=>{
     if(b.classList.contains('drain')) return;
     const e=d.e[+b.dataset.j]; b.classList.add('drain'); haptic('warning');
     setTimeout(()=>b.classList.add('fall'),550);
-    setTimeout(async()=>{ const j=d.e.indexOf(e); if(j>=0) d.e.splice(j,1); await saveDay(S.date); renderDiary(); },1250); }
+    setTimeout(async()=>{ const j=d.e.indexOf(e); if(j>=0) d.e.splice(j,1);
+      // FLIP: remember where the other coffees were, re-render, then slide them from there into their new spots
+      const before=[...document.querySelectorAll('#diary [data-act=spill]')].filter(x=>x!==b).map(x=>x.getBoundingClientRect());
+      await saveDay(S.date); renderDiary();
+      [...document.querySelectorAll('#diary [data-act=spill]')].forEach((x,k)=>{ const r0=before[k]; if(!r0) return; const r1=x.getBoundingClientRect();
+        const dx=r0.left-r1.left, dy=r0.top-r1.top; if(!dx&&!dy) return;
+        x.animate([{transform:`translate(${dx}px,${dy}px)`},{transform:'none'}],{duration:matchMedia('(prefers-reduced-motion: reduce)').matches?0:420,easing:'cubic-bezier(.3,1.3,.5,1)'}); });
+    },1250); }
 });
 
 /* ---------- choosing a dish ---------- */
