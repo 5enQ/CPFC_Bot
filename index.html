@@ -213,6 +213,8 @@ main{padding:12px 10px 40px;gap:12px}
   transition:top .7s cubic-bezier(.3,1.35,.5,1);will-change:transform}
 .wat::before{content:"";position:absolute;left:0;right:0;top:0;height:2px;background:rgba(255,255,255,.75);filter:blur(.4px)}
 .cup.on .wat{top:30%}
+/* an empty cup hides its water once it has drained, so strong shaking can't swing a corner into view */
+.cup:not(.on) .wat{top:150%;visibility:hidden;transition:top .45s ease-in,visibility 0s .45s}
 .cup::after{content:"";position:absolute;top:3px;bottom:5px;left:4px;width:4px;border-radius:3px;background:linear-gradient(180deg,rgba(255,255,255,.7),rgba(255,255,255,0));pointer-events:none}
 /* floating capsule tab bar */
 .nav{left:14px;right:14px;bottom:calc(10px + env(safe-area-inset-bottom,0px));padding:5px;border-radius:30px;gap:4px;border-top:1px solid var(--rim-low)}
@@ -713,6 +715,7 @@ const Slosh=(()=>{
     const dt=Math.min(0.05,(t-(last||t))/1000)||0.016; last=t;
     const acc=170*(target-ang)-7*vel;     // under-damped: overshoots a little, then settles
     vel+=acc*dt; ang+=vel*dt;
+    if(Math.abs(ang)>40){ ang=Math.sign(ang)*40; vel*=-0.3; }   // hard shaking: bounce off a limit
     const el=host(); if(el) el.style.setProperty('--tilt',ang.toFixed(2)+'deg');
     if(Math.abs(target-ang)<0.05&&Math.abs(vel)<0.05){ raf=0; last=0; return; }
     raf=requestAnimationFrame(step); }
