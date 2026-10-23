@@ -94,6 +94,7 @@ body{padding-bottom:calc(64px + env(safe-area-inset-bottom,0px))}
 .track i{display:block;height:100%;border-radius:99px;background:var(--accent)}
 .track i.over{background:var(--bad)}
 .kpis{display:grid;grid-template-columns:repeat(3,1fr);text-align:center;font-size:12px;color:var(--muted);border-top:1px solid var(--line);padding-top:8px}
+.mood{text-align:center;font-size:14.5px;padding:9px 4px 1px;border-top:1px solid var(--line);margin-top:-2px}
 .kpis b{display:block;font-family:var(--mono);font-size:15px;color:var(--fg)}
 .meal .mh{display:flex;align-items:center;gap:8px}
 .meal .mh .t{font-weight:600;flex:1}
@@ -514,7 +515,7 @@ document.getElementById('nav').addEventListener('click',e=>{ const b=e.target.cl
 function ring(eaten,goal){
   const r=52, L=2*Math.PI*r, f=goal?Math.min(eaten/goal,1):0, over=goal&&eaten>goal;
   return `<div class="ring"><svg viewBox="0 0 120 120"><circle cx="60" cy="60" r="${r}" fill="none" stroke="var(--line)" stroke-width="11"/>
-    <circle cx="60" cy="60" r="${r}" fill="none" stroke="${over?'var(--bad)':'var(--accent)'}" stroke-width="11" stroke-linecap="round" stroke-dasharray="${f*L} ${L}"/></svg>
+    ${f>0?`<circle cx="60" cy="60" r="${r}" fill="none" stroke="${over?'var(--bad)':'var(--accent)'}" stroke-width="11" stroke-linecap="round" stroke-dasharray="${f*L} ${L}"/>`:''}</svg>
     <div class="in">${goal?`<b>${fmt(Math.abs(goal-eaten))}</b><span>${over?'ккал сверх нормы':'ккал осталось'}</span>`:`<b>${fmt(eaten)}</b><span>ккал</span>`}</div></div>`;
 }
 function bar(lbl,v,goal){ const f=goal?Math.min(v/goal,1)*100:0;
@@ -525,7 +526,8 @@ function renderDiary(){
   let h=`<div class="dnav"><button class="icon" data-act="prev" aria-label="Предыдущий день">‹</button><b>${dayTitle(s)}</b><button class="icon" data-act="next" aria-label="Следующий день" ${s>=TODAY()?'disabled':''}>›</button></div>`;
   if(!n) h+=`<div class="banner">Заполните профиль, и приложение посчитает вашу дневную норму калорий и БЖУ. <button class="btn ghost" data-act="prof">Заполнить</button></div>`;
   h+=`<div class="card"><div class="sum">${ring(t.k,n&&n.k)}<div class="bars">${bar('Белки',t.p,n&&n.p)}${bar('Жиры',t.f,n&&n.f)}${bar('Углеводы',t.c,n&&n.c)}</div></div>
-    <div class="kpis"><div><b>${fmt(n?n.k:null)}</b>норма</div><div><b>${fmt(t.k)}</b>съедено</div><div><b>${fmt(d.e.length)}</b>${plural(d.e.length,'запись','записи','записей')}</div></div></div>`;
+    <div class="kpis"><div><b>${fmt(n?n.k:null)}</b>норма</div><div><b>${fmt(t.k)}</b>съедено</div><div><b>${fmt(d.e.length)}</b>${plural(d.e.length,'запись','записи','записей')}</div></div>
+    <div class="mood">${moodLine(t.k,n?n.k:2000,s)}</div></div>`;
   MEALS.forEach((m,i)=>{
     const es=d.e.map((e,j)=>[e,j]).filter(([e])=>e[0]===i), mt=totals(s,i);
     h+=`<div class="card meal"><div class="mh"><span class="t">${m}</span><span class="s">${es.length?fmt(mt.k)+' ккал':''}</span><button class="add" data-act="add" data-m="${i}" aria-label="Добавить в ${m.toLowerCase()}">+</button></div>
@@ -679,6 +681,23 @@ function spark(ks){
   return `<svg class="spark" viewBox="0 0 300 70" preserveAspectRatio="none" aria-label="График веса"><polyline fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round" vector-effect="non-scaling-stroke" points="${v.map((w,i)=>x(i)+','+y(w)).join(' ')}"/></svg>
     <div class="muted" style="display:flex;justify-content:space-between"><span>${fmt(v[0],1)} кг</span><span>${v[v.length-1]-v[0]>0?'+':''}${fmt(v[v.length-1]-v[0],1)} кг за период</span><span>${fmt(v[v.length-1],1)} кг</span></div>`;
 }
+
+/* ---------- a playful line about how much was eaten, relative to the norm ---------- */
+const MOOD=[  // [share of the norm up to, variants]; {Day} is "Сегодня" or "В этот день", {ел} agrees with the profile's sex
+  [0,    ['Пока пусто. Самое время что-нибудь съесть 🍳','Тарелка ждёт первую запись 🍽️']],
+  [0.15, ['{Day} ты покушал{а} как уточка 🦆','{Day} ты клюёшь как воробушек 🐦']],
+  [0.35, ['Перекус хомячка засчитан 🐹','{Day} ты поел{а} как котик из мисочки 🐱']],
+  [0.6,  ['Половина пути, как у панды к полднику 🐼','{Day} ты поел{а} как зайчик, морковка за морковкой 🐰']],
+  [0.85, ['Почти у цели, как лиса после охоты 🦊','Ещё немного, и будешь сыт{а} как медвежонок 🐻']],
+  [1.1,  ['В самую точку, как довольный кот 😺','Идеально! Сыт{а} как пингвин после рыбалки 🐧']],
+  [1.3,  ['Чуть больше нормы, по-медвежьи 🐻','{Day} ты поел{а} как енот у холодильника 🦝']],
+  [9e9,  ['{Day} у тебя пир, как у хомяка перед зимой 🐹','Праздник живота, как у бегемота на пикнике 🦛']]
+];
+function moodLine(eaten,goal,s){
+  const r=eaten<=0?0:eaten/goal, row=MOOD.find(([up])=>eaten<=0?up===0:up>0&&r<=up);
+  const v=row[1], h=[...s].reduce((a,c)=>a+c.charCodeAt(0),0)%v.length;   // same phrase all day, no flicker
+  const f=S.prof&&S.prof.sex==='f';
+  return esc(v[h].replace('{Day}',s===TODAY()?'Сегодня':'В этот день').replace(/\{а\}/g,f?'а':'')); }
 
 /* ---------- water slosh: damped spring towards the tilt reported by the motion sensor ---------- */
 const Slosh=(()=>{
