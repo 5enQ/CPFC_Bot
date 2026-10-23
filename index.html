@@ -94,6 +94,7 @@ body{padding-bottom:calc(64px + env(safe-area-inset-bottom,0px))}
 .track i{display:block;height:100%;border-radius:99px;background:var(--accent)}
 .track i.over{background:var(--bad)}
 .kpis{display:grid;grid-template-columns:repeat(3,1fr);text-align:center;font-size:12px;color:var(--muted);border-top:1px solid var(--line);padding-top:8px}
+.recent{display:grid;gap:12px;padding:12px 10px 0}.recent:empty{display:none}
 .mood{text-align:center;font-size:14.5px;padding:9px 4px 1px;border-top:1px solid var(--line);margin-top:-2px}
 .kpis b{display:block;font-family:var(--mono);font-size:15px;color:var(--fg)}
 .meal .mh{display:flex;align-items:center;gap:8px}
@@ -158,7 +159,16 @@ html[data-scheme=dark]{
   --b1:color-mix(in srgb,var(--accent) 60%,#0d3b2a); --b2:#14365c; --b3:#4a2a22; --b4:#2c2356; --base:#0b0e12;
   --line:rgba(255,255,255,.12);
 }
-body{background:var(--base);padding-bottom:calc(96px + env(safe-area-inset-bottom,0px))}
+body{background:var(--base);padding-bottom:0}
+/* three tabs side by side in one strip; the strip slides with the tab-bar pill.
+   The page itself never scrolls (each tab scrolls on its own), so the fixed tab bar can't jump. */
+html,body{height:100%;overflow:hidden;overscroll-behavior:none}
+.strip{position:fixed;inset:0;display:flex;width:300%;will-change:transform;
+  transform:translate3d(calc(var(--i,0) * -100% / 3),0,0);transition:transform .55s cubic-bezier(.32,1.12,.5,1)}
+.view{flex:0 0 calc(100% / 3);height:100%;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;overscroll-behavior-y:contain;
+  padding-bottom:calc(96px + env(safe-area-inset-bottom,0px))}
+#vDiary{order:0} #vFood{order:1} #vMe{order:2}
+@media (prefers-reduced-motion:reduce){.strip{transition:none}}
 body::before{content:"";position:fixed;inset:-10%;z-index:-1;pointer-events:none;
   background:
     radial-gradient(38% 30% at 12% 8%,var(--b1),transparent 70%),
@@ -230,10 +240,7 @@ main{padding:12px 10px 40px;gap:12px}
   box-shadow:inset 0 1px 0 var(--rim),0 2px 8px -3px color-mix(in srgb,var(--accent) 40%,transparent)}
 .nav .ind.go i{animation:squish .55s cubic-bezier(.3,.9,.4,1)}
 @keyframes squish{0%{transform:scale(1,1)}30%{transform:scale(1.18,.9)}65%{transform:scale(.97,1.03)}100%{transform:scale(1,1)}}
-/* the page slides in from the side of the tab you came from */
-.view.enter{animation:viewIn .32s cubic-bezier(.2,.8,.3,1)}
-@keyframes viewIn{from{opacity:0;transform:translateX(calc(var(--dir,0) * 18px))}to{opacity:1;transform:none}}
-@media (prefers-reduced-motion:reduce){.nav .ind,.nav button svg{transition:none}.nav .ind.go i,.view.enter{animation:none}}
+@media (prefers-reduced-motion:reduce){.nav .ind,.nav button svg{transition:none}.nav .ind.go i{animation:none}}
 /* sheet floats above the content too */
 .sheetWrap{background:rgba(0,0,0,.25);padding:8px 8px calc(8px + env(safe-area-inset-bottom,0px))}
 .sheet{border-radius:30px;background:var(--glass-strong);padding:18px 16px 18px}
@@ -246,9 +253,10 @@ main{padding:12px 10px 40px;gap:12px}
 </style>
 </head>
 <body>
+<div class="strip" id="strip">
 <section class="view" id="vDiary"><div class="pad" id="diary"></div></section>
-<section class="view" id="vMe" hidden><div class="pad" id="me"></div></section>
-<section class="view" id="vFood" hidden>
+<section class="view" id="vMe" inert><div class="pad" id="me"></div></section>
+<section class="view" id="vFood" inert>
 <div class="top">
   <div class="pickbar" id="pickbar" hidden><b id="pickTxt"></b><button class="btn ghost" id="customBtn" type="button">Своё блюдо</button><button class="btn ghost" id="pickCancel" type="button">Отмена</button></div>
   <div class="search">
@@ -269,8 +277,10 @@ main{padding:12px 10px 40px;gap:12px}
     <span class="count" id="count"></span>
   </div>
 </div>
+<div class="recent" id="recent"></div>
 <main id="list"></main>
 </section>
+</div>
 <nav class="nav" id="nav">
   <span class="ind" aria-hidden="true"><i></i></span>
   <button type="button" data-v="vDiary" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>Дневник</button>
@@ -290,7 +300,7 @@ const DATA = [{"id":"mealty-454","store":"Милти","cat":"Завтрак","na
 const CODES = {};   // barcode -> [dish ids]; only the owner fills this, users search by it
 const tg = window.Telegram && Telegram.WebApp ? Telegram.WebApp : null;
 const inTg = !!(tg && tg.platform && tg.platform !== 'unknown');
-if (inTg) { tg.ready(); tg.expand(); }
+if (inTg) { tg.ready(); tg.expand(); try{ tg.isVersionAtLeast('7.7')&&tg.disableVerticalSwipes(); }catch(e){} }
 function applyScheme(){ const dark=inTg?tg.colorScheme==='dark':matchMedia('(prefers-color-scheme: dark)').matches; document.documentElement.dataset.scheme=dark?'dark':'light'; }
 applyScheme();
 if(inTg){ try{ tg.onEvent('themeChanged',applyScheme); tg.setHeaderColor&&tg.setHeaderColor('bg_color'); }catch(e){} } else { try{ matchMedia('(prefers-color-scheme: dark)').addEventListener('change',applyScheme); }catch(e){} }
@@ -322,7 +332,7 @@ function chipsHTML(){
     c('cat','','Любые блюда')+cats.map(([v,l])=>c('cat',v,l)).join('')+'<span class="sep"></span>'+
     c('rate','','Любая оценка')+c('rate','g','Полезно')+c('rate','y','Умеренно')+c('rate','r','Реже');
 }
-document.getElementById('list').addEventListener('click',e=>{const b=e.target.closest('.eat'); if(b){ openDish(BYID[b.dataset.id]); return; } const a=e.target.closest('a.dish'); if(a&&inTg){ e.preventDefault(); try{tg.openLink(a.href);}catch(err){window.open(a.href,'_blank');} }});
+for(const id of ['list','recent']) document.getElementById(id).addEventListener('click',e=>{const b=e.target.closest('.eat'); if(b){ openDish(BYID[b.dataset.id]); return; } const a=e.target.closest('a.dish'); if(a&&inTg){ e.preventDefault(); try{tg.openLink(a.href);}catch(err){window.open(a.href,'_blank');} }});
 document.getElementById('chips').addEventListener('click',e=>{const b=e.target.closest('.chip'); if(!b)return; st[b.dataset.g]=b.dataset.v; render();});
 document.getElementById('sort').addEventListener('change',e=>{st.sort=e.target.value; render();});
 document.getElementById('q').addEventListener('input',e=>{st.q=e.target.value; status=''; render();});
@@ -359,17 +369,22 @@ function card(d,found){
     </div>${per}
     ${d.why?`<div class="why">${esc(d.why)}</div>`:''}
     ${chkHTML(d)}
-    <button class="addbtn eat" type="button" data-id="${esc(d.id)}">+ ${pick!=null?'В '+MEALS[pick].toLowerCase():'Съел'}</button>
+    <button class="addbtn eat" type="button" data-id="${esc(d.id)}">+ Съел</button>
   </article>`;
 }
+/* recently eaten dishes above the list while choosing for a meal; small, so it is cheap to redraw */
+function renderRecent(){
+  const rec=pick!=null&&!st.q.trim()?recentDishes():[];
+  document.getElementById('recent').innerHTML=rec.length?`<div class="h2" style="padding:2px 2px 0">Недавние</div>`+rec.map(d=>card(d,false)).join('')+`<div class="h2" style="padding:6px 2px 0">Все блюда</div>`:'';
+}
 function render(){
+  renderRecent();
   document.getElementById('chips').innerHTML=chipsHTML();
   const list=DATA.filter(matches);
   const key=SORT[st.sort];
   list.sort((a,b)=>{const x=key(a),y=key(b); return typeof x==='string'?x.localeCompare(y,'ru'):x-y;});
   const qd=digits(st.q); const exact=isCodeQuery()&&qd.length>=8;
   let html='';
-  if(pick!=null && !st.q.trim()){ const rec=recentDishes(); if(rec.length) html+=`<div class="h2" style="padding:2px 2px 0">Недавние</div>`+rec.map(d=>card(d,false)).join('')+`<div class="h2" style="padding:6px 2px 0">Все блюда</div>`; }
   if(status) html+=`<div class="banner">${esc(status)}</div>`;
   if(exact&&!list.length) html+=`<div class="banner">Товара со штрихкодом <b>${esc(qd)}</b> пока нет в базе. Попробуйте найти его по названию.</div>`;
   html+= list.length ? list.map(d=>card(d,exact&&(CODES[qd]||[]).includes(d.id))).join('') :
@@ -383,7 +398,7 @@ function showCode(code){
   st.q=code; st.store=st.cat=st.rate=''; status='';
   document.getElementById('q').value=code;
   haptic(CODES[code]?'success':'warning');
-  render(); window.scrollTo(0,0);
+  render(); document.getElementById('vFood').scrollTop=0;
 }
 
 /* ---------- scanning: live camera, photo as a fallback ---------- */
@@ -524,13 +539,14 @@ function show(v){
   const from=TABS.indexOf(S.view), to=TABS.indexOf(v);
   const ind=document.querySelector('#nav .ind'); ind.style.setProperty('--i',to);
   if(from!==to){ ind.classList.remove('go'); void ind.offsetWidth; ind.classList.add('go');
-    const el=document.getElementById(v); el.style.setProperty('--dir',to>from?1:-1); el.classList.remove('enter'); void el.offsetWidth; el.classList.add('enter'); }
+  }
+  document.getElementById('strip').style.setProperty('--i',to);
   S.view=v;
-  for(const id of ['vDiary','vFood','vMe']) document.getElementById(id).hidden=id!==v;
+  for(const id of TABS){ const el=document.getElementById(id); if(id===v) el.removeAttribute('inert'); else el.setAttribute('inert',''); }
   for(const b of document.querySelectorAll('#nav button')) b.setAttribute('aria-current',b.dataset.v===v?'page':'false');
   if(v!=='vFood' && pick!=null){ pick=null; renderPick(); }
-  if(v==='vDiary'){ renderDiary(); Slosh.start(); } else { Slosh.stop(); if(v==='vMe') renderMe(); else render(); }
-  window.scrollTo(0,0); updateBack();
+  if(v==='vDiary'){ renderDiary(); Slosh.start(); } else { Slosh.stop(); if(v==='vMe') renderMe(); else renderRecent(); }   // the long dish list is built once, not on every tab switch
+  updateBack();
 }
 document.getElementById('nav').addEventListener('click',e=>{ const b=e.target.closest('button'); if(b) show(b.dataset.v); });
 
