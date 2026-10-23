@@ -95,6 +95,19 @@ body{padding-bottom:calc(64px + env(safe-area-inset-bottom,0px))}
 .track i.over{background:var(--bad)}
 .kpis{display:grid;grid-template-columns:repeat(3,1fr);text-align:center;font-size:12px;color:var(--muted);border-top:1px solid var(--line);padding-top:8px}
 .recent{display:grid;gap:12px;padding:12px 10px 0}.recent:empty{display:none}
+.facts{display:grid;gap:0}
+.facts div{display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-top:1px solid var(--line);font-size:14.5px}
+.facts div:first-child{border-top:0}
+.facts span{color:var(--muted)}
+.facts b{font-weight:600;text-align:right}
+.setrow{display:flex;align-items:center;justify-content:space-between;gap:12px;cursor:pointer}
+.setrow>span{display:grid;gap:2px}
+.switch{appearance:none;-webkit-appearance:none;flex:none;width:51px;height:31px;border-radius:999px;margin:0;position:relative;cursor:pointer;
+  background:color-mix(in srgb,var(--fg) 16%,transparent);box-shadow:inset 0 1px 2px rgba(0,0,0,.12);transition:background .25s}
+.switch::after{content:"";position:absolute;top:2px;left:2px;width:27px;height:27px;border-radius:50%;background:#fff;
+  box-shadow:0 2px 5px rgba(0,0,0,.25),inset 0 1px 0 rgba(255,255,255,.9);transition:transform .35s cubic-bezier(.34,1.4,.5,1)}
+.switch:checked{background:var(--accent)}
+.switch:checked::after{transform:translateX(20px)}
 .mood{text-align:center;font-size:14.5px;padding:9px 4px 1px;border-top:1px solid var(--line);margin-top:-2px}
 .kpis b{display:block;font-family:var(--mono);font-size:15px;color:var(--fg)}
 .meal .mh{display:flex;align-items:center;gap:8px}
@@ -517,7 +530,7 @@ function dayTitle(s){ const d=new Date(s+'T12:00:00'), t=TODAY();
   return s===t?'Сегодня, '+base : s===addDays(t,-1)?'Вчера, '+base : WD[d.getDay()]+', '+base; }
 
 const plural=(n,a,b,c)=>{ const m=n%10,h=n%100; return m===1&&h!==11?a:m>=2&&m<=4&&(h<12||h>14)?b:c; };
-const S={ prof:null, wt:{}, rc:[], days:{}, date:TODAY(), view:'vDiary' };
+const S={ set:{coffee:true}, editProf:false, prof:null, wt:{}, rc:[], days:{}, date:TODAY(), view:'vDiary' };
 const day=s=>S.days[s]||(S.days[s]={e:[],w:0});
 async function saveDay(s){ const d=day(s); const v=(d.e.length||d.w)?JSON.stringify(d):'';
   if(v.length>4000){ toast('В этом дне слишком много записей, удалите лишние'); return false; }
@@ -526,9 +539,9 @@ const saveProf=()=>KV.set('prof',JSON.stringify(S.prof));
 function saveWt(){ const ks=Object.keys(S.wt).sort(); while(ks.length>180) delete S.wt[ks.shift()]; return KV.set('wt',JSON.stringify(S.wt)); }
 
 async function loadAll(){
-  const keys=['prof','wt','rc']; for(let i=0;i<35;i++) keys.push('d_'+addDays(TODAY(),-i));
+  const keys=['prof','wt','rc','set']; for(let i=0;i<35;i++) keys.push('d_'+addDays(TODAY(),-i));
   const v=await KV.get(keys);
-  S.prof=parse(v.prof,null); S.wt=parse(v.wt,{}); S.rc=parse(v.rc,[]);
+  S.prof=parse(v.prof,null); S.wt=parse(v.wt,{}); S.rc=parse(v.rc,[]); S.set=Object.assign({coffee:true},parse(v.set,{}));
   for(const k of keys) if(k.startsWith('d_')&&v[k]) S.days[k.slice(2)]=parse(v[k],{e:[],w:0});
 }
 async function ensureDay(s){ if(S.days[s]) return; const v=await KV.get(['d_'+s]); S.days[s]=parse(v['d_'+s],{e:[],w:0}); }
@@ -589,7 +602,7 @@ function drinkKind(e){
   if(/латте|капучино|флэт|флет|раф|макиато|мокк|кортадо|с молоком|latte|cappuccino|flat white/.test(n)) return 'milk';
   if(/кофе|американо|фильтр|колд.?брю|coffee|americano/.test(n)) return 'black';
   return null; }
-function coffees(d){ return d.e.map((e,j)=>({e,j,kind:drinkKind(e)})).filter(x=>x.kind).map(x=>({j:x.j,kind:x.kind,name:x.e[2],ml:x.e[3]!=null?x.e[3]:COFFEE[x.kind].ml})); }
+function coffees(d){ if(!S.set.coffee) return []; return d.e.map((e,j)=>({e,j,kind:drinkKind(e)})).filter(x=>x.kind&&!x.e[8]).map(x=>({j:x.j,kind:x.kind,name:x.e[2],ml:x.e[3]!=null?x.e[3]:COFFEE[x.kind].ml})); }
 function waterLine(d,wg){ const c=coffees(d), ml=c.reduce((a,x)=>a+x.ml,0);
   return `${fmt(d.w*0.25,2)} из ${fmt(wg*0.25,2)} л`+(c.length?` и ${ml<1000?fmt(ml)+' мл':fmt(ml/1000,2)+' л'} кофе`:' · стакан 250 мл'); }
 function renderDiary(){
@@ -645,7 +658,7 @@ document.getElementById('diary').addEventListener('click',async e=>{
     if(b.classList.contains('drain')) return;
     const e=d.e[+b.dataset.j]; b.classList.add('drain'); haptic('warning');
     setTimeout(()=>b.classList.add('fall'),550);
-    setTimeout(async()=>{ const j=d.e.indexOf(e); if(j>=0) d.e.splice(j,1);
+    setTimeout(async()=>{ e[8]=1;   // only leaves the water card; the entry stays in the diary
       // FLIP: remember where the other coffees were, re-render, then slide them from there into their new spots
       const before=[...document.querySelectorAll('#diary [data-act=spill]')].filter(x=>x!==b).map(x=>x.getBoundingClientRect());
       await saveDay(S.date); renderDiary();
@@ -721,7 +734,7 @@ function openEntry(j){ const e=day(S.date).e[j]; if(e[3]==null) openCustom(j); e
 
 async function commit(e,j){
   const d=day(S.date);
-  if(j!=null) d.e[j]=e; else d.e.push(e);
+  if(j!=null){ if(d.e[j][8]) e[8]=d.e[j][8]; d.e[j]=e; } else d.e.push(e);
   if(e[1]){ S.rc=[e[1],...S.rc.filter(x=>x!==e[1])].slice(0,20); KV.set('rc',JSON.stringify(S.rc)); }
   const ok=await saveDay(S.date);
   if(ok===false){ if(j==null) d.e.pop(); return; }
@@ -738,13 +751,24 @@ function toast(t){ const el=document.getElementById('toast'); el.textContent=t; 
 function renderMe(){
   const p=S.prof||{sex:'f',age:'',cm:'',kg:'',act:1.375,goal:'keep'}, n=norm();
   const ks=Object.keys(S.wt).sort();
-  let h=`<div class="card"><div class="h2">Ваши данные <span>${KV.cloud?'хранятся в Telegram':'хранятся в этом браузере'}</span></div><div class="form">
+  const open=S.editProf||!S.prof;
+  let h=open?`<div class="card"><div class="h2">Ваши данные <span>${KV.cloud?'хранятся в Telegram':'хранятся в этом браузере'}</span></div><div class="form">
     <div class="seg" id="sexSeg"><button type="button" class="chip" data-s="f" aria-pressed="${p.sex==='f'}">Женщина</button><button type="button" class="chip" data-s="m" aria-pressed="${p.sex==='m'}">Мужчина</button></div>
     <div class="grid2" style="grid-template-columns:repeat(3,1fr)"><label>Возраст<input id="pAge" type="number" inputmode="numeric" min="14" max="100" value="${p.age}"></label><label>Рост, см<input id="pCm" type="number" inputmode="numeric" min="120" max="230" value="${p.cm}"></label><label>Вес, кг<input id="pKg" type="number" inputmode="decimal" min="35" max="250" value="${curWeight()||p.kg}"></label></div>
     <label>Активность<select id="pAct">${ACT.map(([v,l])=>`<option value="${v}" ${+p.act===v?'selected':''}>${l}</option>`).join('')}</select></label>
     <label>Цель<select id="pGoal">${Object.entries(GOAL).map(([v,[l]])=>`<option value="${v}" ${p.goal===v?'selected':''}>${l}</option>`).join('')}</select></label>
     <label>Своя норма калорий (необязательно)<input id="pOver" type="number" inputmode="numeric" placeholder="посчитать автоматически" value="${p.kOver||''}"></label>
-    <button class="btn big" id="pSave" type="button">Сохранить</button></div></div>`;
+    <button class="btn big" id="pSave" type="button">Сохранить</button>${S.prof?'<button class="btn big ghost" id="pCancel" type="button">Отмена</button>':''}</div></div>`
+  : `<div class="card"><div class="h2">Ваши данные <span>${KV.cloud?'хранятся в Telegram':'хранятся в этом браузере'}</span></div>
+    <div class="facts">
+      <div><span>Пол</span><b>${p.sex==='m'?'Мужчина':'Женщина'}</b></div>
+      <div><span>Возраст</span><b>${p.age} ${plural(p.age,'год','года','лет')}</b></div>
+      <div><span>Рост</span><b>${p.cm} см</b></div>
+      <div><span>Вес</span><b>${fmt(curWeight()||p.kg,1)} кг</b></div>
+      <div><span>Активность</span><b>${(ACT.find(([v])=>v===+p.act)||[0,'—'])[1]}</b></div>
+      <div><span>Цель</span><b>${GOAL[p.goal][0]}${p.kOver?', своя норма '+fmt(p.kOver)+' ккал':''}</b></div>
+    </div>
+    <button class="btn big ghost" id="pEdit" type="button">Изменить данные</button></div>`;
   if(n) h+=`<div class="card"><div class="h2">Ваша норма в день</div>${calcHTML(n)}
     <div class="muted">Обмен веществ в покое ${fmt(n.bmr)} ккал, с учётом активности ${fmt(n.tdee)} ккал. ${S.prof.kOver?'Сейчас стоит ваша собственная норма.':S.prof.goal==='lose'?'Для похудения взят дефицит 15%.':S.prof.goal==='gain'?'Для набора взят профицит 10%.':''} Белок ${S.prof.goal==='keep'?'1,4':'1,8'} г и жиры 0,9 г на кг веса, остальное углеводы.</div></div>`;
   h+=`<div class="card"><div class="h2">Вес <span>${ks.length?ks.length+' '+plural(ks.length,'запись','записи','записей'):''}</span></div>
@@ -752,17 +776,24 @@ function renderMe(){
     ${ks.length>1?spark(ks):''}
     ${ks.length?`<div class="wlist">${ks.slice(-7).reverse().map((k,i,a)=>{ const prev=ks[ks.length-2-i]; const df=prev!=null?S.wt[k]-S.wt[prev]:null;
       return `<div><span>${dayTitle(k)}</span><span>${fmt(S.wt[k],1)} кг${df?` <span class="muted">${df>0?'+':''}${fmt(df,1)}</span>`:''}</span></div>`; }).join('')}</div>`:'<div class="muted">Записывайте вес раз в несколько дней, утром натощак. Норма калорий пересчитается сама.</div>'}</div>`;
+  h+=`<div class="card"><div class="h2">Настройки</div>
+    <label class="setrow"><span><b>Кофе в разделе «Вода»</b><span class="muted">Стаканчики и объём кофе рядом с водой</span></span>
+      <input type="checkbox" class="switch" id="setCoffee" ${S.set.coffee?'checked':''}></label></div>`;
   document.getElementById('me').innerHTML=h;
+  document.getElementById('setCoffee').onchange=e=>{ S.set.coffee=e.target.checked; KV.set('set',JSON.stringify(S.set)); haptic('success'); };
+  if(!open){ document.getElementById('pEdit').onclick=()=>{ S.editProf=true; renderMe(); }; }
+  else if(S.prof) document.getElementById('pCancel').onclick=()=>{ S.editProf=false; renderMe(); };
   let sex=p.sex;
-  document.getElementById('sexSeg').onclick=e=>{ const b=e.target.closest('[data-s]'); if(!b) return; sex=b.dataset.s; for(const c of document.querySelectorAll('#sexSeg .chip')) c.setAttribute('aria-pressed',c===b); };
-  document.getElementById('pSave').onclick=async()=>{
+  if(open) document.getElementById('sexSeg').onclick=e=>{ const b=e.target.closest('[data-s]'); if(!b) return; sex=b.dataset.s; for(const c of document.querySelectorAll('#sexSeg .chip')) c.setAttribute('aria-pressed',c===b); };
+  if(open) document.getElementById('pSave').onclick=async()=>{
+
     const age=num(pAge.value), cm=num(pCm.value), kg=num(pKg.value), over=num(pOver.value);
     const bad=[[age,14,100,pAge],[cm,120,230,pCm],[kg,35,250,pKg]].find(([v,a,b])=>v==null||v<a||v>b);
     if(bad){ bad[3].focus(); toast('Проверьте возраст, рост и вес'); return; }
     const prevKg=curWeight();
     S.prof={sex,age,cm,kg,act:+pAct.value,goal:pGoal.value,kOver:over&&over>=800?Math.round(over):null};
     if(kg!==prevKg||!Object.keys(S.wt).length){ S.wt[TODAY()]=kg; await saveWt(); }
-    await saveProf(); haptic('success'); toast('Сохранено, норма пересчитана'); renderMe();
+    S.editProf=false; await saveProf(); haptic('success'); toast('Сохранено, норма пересчитана'); renderMe();
   };
   document.getElementById('wSave').onclick=async()=>{ const v=num(wIn.value); if(!v||v<30||v>300){ wIn.focus(); return; }
     S.wt[TODAY()]=Math.round(v*10)/10; await saveWt(); if(S.prof){ S.prof.kg=S.wt[TODAY()]; saveProf(); } haptic('success'); toast('Вес записан'); renderMe(); };
